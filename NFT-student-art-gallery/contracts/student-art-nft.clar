@@ -132,3 +132,129 @@
 (define-read-only (is-following (artist principal) (follower principal))
     (default-to false (get following (map-get? artist-followers { artist: artist, follower: follower })))
 )
+
+;; Public functions
+;; #[allow(unchecked_data)]
+(define-public (create-artist-profile (name (string-ascii 50)))
+    (let ((existing-profile (map-get? artist-profiles { artist: tx-sender })))
+        (if (is-some existing-profile)
+            err-already-exists
+            (ok (map-set artist-profiles
+                { artist: tx-sender }
+                { name: name, artworks-created: u0, total-earned: u0 }
+            ))
+        )
+    )
+)
+
+;; #[allow(unchecked_data)]
+(define-public (mint-artwork (title (string-ascii 100)) (uri (string-ascii 256)) (price uint) (school-percentage uint))
+    (let (
+        (new-artwork-id (+ (var-get total-artworks) u1))
+        (artist-profile (unwrap! (map-get? artist-profiles { artist: tx-sender }) err-unauthorized))
+    )
+        (asserts! (not (var-get contract-paused)) err-unauthorized)
+        (asserts! (<= school-percentage u100) err-invalid-percentage)
+        (asserts! (>= price (var-get minimum-price)) err-invalid-price)
+        (map-set artworks
+            { artwork-id: new-artwork-id }
+            {
+                title: title,
+                artist: tx-sender,
+                uri: uri,
+                price: price,
+                for-sale: true,
+                school-percentage: school-percentage
+            }
+        )
+        (map-set artwork-owners
+            { artwork-id: new-artwork-id }
+            { owner: tx-sender }
+        )
+        (map-set artist-profiles
+            { artist: tx-sender }
+            (merge artist-profile { artworks-created: (+ (get artworks-created artist-profile) u1) })
+        )
+        (var-set total-artworks new-artwork-id)
+        (ok new-artwork-id)
+    )
+)
+
+;; #[allow(unchecked_data)]
+(define-public (purchase-artwork (artwork-id uint) (school principal))
+    (let (
+        (artwork (unwrap! (map-get? artworks { artwork-id: artwork-id }) err-not-found))
+        (owner-info (unwrap! (map-get? artwork-owners { artwork-id: artwork-id }) err-not-found))
+        (artist-profile (unwrap! (map-get? artist-profiles { artist: (get artist artwork) }) err-not-found))
+        (price (get price artwork))
+        (school-amount (/ (* price (get school-percentage artwork)) u100))
+        (platform-amount (/ (* price (var-get platform-fee-percentage)) u100))
+        (artist-amount (- (- price school-amount) platform-amount))
+    )
+        (asserts! (not (var-get contract-paused)) err-unauthorized)
+        (asserts! (get for-sale artwork) err-artwork-not-for-sale)
+        (asserts! (not (is-eq tx-sender (get owner owner-info))) err-unauthorized)
+        (try! (stx-transfer? price tx-sender (get artist artwork)))
+        (map-set artwork-owners
+            { artwork-id: artwork-id }
+            { owner: tx-sender }
+        )
+        (map-set artworks
+            { artwork-id: artwork-id }
+            (merge artwork { for-sale: false })
+        )
+        (map-set artist-profiles
+            { artist: (get artist artwork) }
+            (merge artist-profile { total-earned: (+ (get total-earned artist-profile) artist-amount) })
+        )
+        (map-set school-fundraising
+            { school: school }
+            { total-raised: (+ (get-school-fundraising school) school-amount) }
+        )
+        (var-set total-sales (+ (var-get total-sales) u1))
+        (ok true)
+    )
+)
+
+;; #[allow(unchecked_data)]
+(define-public (set-artwork-for-sale (artwork-id uint) (for-sale bool) (new-price uint))
+    (let (
+        (artwork (unwrap! (map-get? artworks { artwork-id: artwork-id }) err-not-found))
+        (owner-info (unwrap! (map-get? artwork-owners { artwork-id: artwork-id }) err-not-found))
+    )
+        (asserts! (is-eq tx-sender (get owner owner-info)) err-unauthorized)
+        (asserts! (>= new-price (var-get minimum-price)) err-invalid-price)
+        (ok (map-set artworks
+            { artwork-id: artwork-id }
+            (merge artwork { for-sale: for-sale, price: new-price })
+        ))
+    )
+)
+
+;; #[allow(unchecked_data)]
+(define-public (transfer-artwork (artwork-id uint) (recipient principal))
+    (let (
+        (artwork (unwrap! (map-get? artworks { artwork-id: artwork-id }) err-not-found))
+        (owner-info (unwrap! (map-get? artwork-owners { artwork-id: artwork-id }) err-not-found))
+    )
+        (asserts! (is-eq tx-sender (get owner owner-info)) err-unauthorized)
+        (asserts! (not (get for-sale artwork)) err-unauthorized)
+        (map-set artwork-owners
+            { artwork-id: artwork-id }
+            { owner: recipient }
+        )
+        (ok true)
+    )
+)
+
+;; #[allow(unchecked_data)]
+(define-public (update-artist-profile (name (string-ascii 50)))
+    (let (
+        (artist-profile (unwrap! (map-get? artist-profiles { artist: tx-sender }) err-not-found))
+    )
+        (ok (map-set artist-profiles
+            { artist: tx-sender }
+            (merge artist-profile { name: name })
+        ))
+    )
+)
