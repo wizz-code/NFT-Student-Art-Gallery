@@ -75,3 +75,60 @@
     { artist: principal }
     { count: uint }
 )
+
+;; Read-only functions
+(define-read-only (get-artwork (artwork-id uint))
+    (map-get? artworks { artwork-id: artwork-id })
+)
+
+(define-read-only (get-artwork-owner (artwork-id uint))
+    (map-get? artwork-owners { artwork-id: artwork-id })
+)
+
+(define-read-only (get-artist-profile (artist principal))
+    (map-get? artist-profiles { artist: artist })
+)
+
+(define-read-only (get-school-fundraising (school principal))
+    (default-to u0 (get total-raised (map-get? school-fundraising { school: school })))
+)
+
+(define-read-only (get-total-artworks)
+    (ok (var-get total-artworks))
+)
+
+(define-read-only (get-total-sales)
+    (ok (var-get total-sales))
+)
+
+(define-read-only (get-platform-fee)
+    (ok (var-get platform-fee-percentage))
+)
+
+(define-read-only (get-contract-paused)
+    (ok (var-get contract-paused))
+)
+
+(define-read-only (get-minimum-price)
+    (ok (var-get minimum-price))
+)
+
+(define-read-only (get-artwork-likes (artwork-id uint))
+    (default-to u0 (get count (map-get? artwork-like-count { artwork-id: artwork-id })))
+)
+
+(define-read-only (has-liked-artwork (artwork-id uint) (liker principal))
+    (default-to false (get liked (map-get? artwork-likes { artwork-id: artwork-id, liker: liker })))
+)
+
+(define-read-only (is-featured (artwork-id uint))
+    (is-some (map-get? featured-artworks { artwork-id: artwork-id }))
+)
+
+(define-read-only (get-artist-followers (artist principal))
+    (default-to u0 (get count (map-get? artist-follower-count { artist: artist })))
+)
+
+(define-read-only (is-following (artist principal) (follower principal))
+    (default-to false (get following (map-get? artist-followers { artist: artist, follower: follower })))
+)
