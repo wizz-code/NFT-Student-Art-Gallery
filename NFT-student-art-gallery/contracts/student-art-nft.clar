@@ -258,3 +258,145 @@
         ))
     )
 )
+
+;; #[allow(unchecked_data)]
+(define-public (like-artwork (artwork-id uint))
+    (let (
+        (artwork (unwrap! (map-get? artworks { artwork-id: artwork-id }) err-not-found))
+        (current-likes (get-artwork-likes artwork-id))
+        (already-liked (has-liked-artwork artwork-id tx-sender))
+    )
+        (asserts! (not already-liked) err-already-exists)
+        (map-set artwork-likes
+            { artwork-id: artwork-id, liker: tx-sender }
+            { liked: true }
+        )
+        (map-set artwork-like-count
+            { artwork-id: artwork-id }
+            { count: (+ current-likes u1) }
+        )
+        (ok true)
+    )
+)
+
+;; #[allow(unchecked_data)]
+(define-public (unlike-artwork (artwork-id uint))
+    (let (
+        (artwork (unwrap! (map-get? artworks { artwork-id: artwork-id }) err-not-found))
+        (current-likes (get-artwork-likes artwork-id))
+        (already-liked (has-liked-artwork artwork-id tx-sender))
+    )
+        (asserts! already-liked err-not-found)
+        (map-set artwork-likes
+            { artwork-id: artwork-id, liker: tx-sender }
+            { liked: false }
+        )
+        (map-set artwork-like-count
+            { artwork-id: artwork-id }
+            { count: (if (> current-likes u0) (- current-likes u1) u0) }
+        )
+        (ok true)
+    )
+)
+
+;; #[allow(unchecked_data)]
+(define-public (follow-artist (artist principal))
+    (let (
+        (current-followers (get-artist-followers artist))
+        (already-following (is-following artist tx-sender))
+    )
+        (asserts! (not (is-eq tx-sender artist)) err-unauthorized)
+        (asserts! (not already-following) err-already-exists)
+        (map-set artist-followers
+            { artist: artist, follower: tx-sender }
+            { following: true }
+        )
+        (map-set artist-follower-count
+            { artist: artist }
+            { count: (+ current-followers u1) }
+        )
+        (ok true)
+    )
+)
+
+;; #[allow(unchecked_data)]
+(define-public (unfollow-artist (artist principal))
+    (let (
+        (current-followers (get-artist-followers artist))
+        (already-following (is-following artist tx-sender))
+    )
+        (asserts! already-following err-not-found)
+        (map-set artist-followers
+            { artist: artist, follower: tx-sender }
+            { following: false }
+        )
+        (map-set artist-follower-count
+            { artist: artist }
+            { count: (if (> current-followers u0) (- current-followers u1) u0) }
+        )
+        (ok true)
+    )
+)
+
+;; #[allow(unchecked_data)]
+(define-public (feature-artwork (artwork-id uint))
+    (let (
+        (artwork (unwrap! (map-get? artworks { artwork-id: artwork-id }) err-not-found))
+    )
+        (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+        (map-set featured-artworks
+            { artwork-id: artwork-id }
+            { featured: true, featured-at: stacks-block-height }
+        )
+        (ok true)
+    )
+)
+
+;; #[allow(unchecked_data)]
+(define-public (unfeature-artwork (artwork-id uint))
+    (let (
+        (artwork (unwrap! (map-get? artworks { artwork-id: artwork-id }) err-not-found))
+    )
+        (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+        (map-delete featured-artworks { artwork-id: artwork-id })
+        (ok true)
+    )
+)
+
+;; Admin functions
+;; #[allow(unchecked_data)]
+(define-public (set-platform-fee (new-fee uint))
+    (begin
+        (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+        (asserts! (<= new-fee u20) err-invalid-percentage)
+        (var-set platform-fee-percentage new-fee)
+        (ok true)
+    )
+)
+
+;; #[allow(unchecked_data)]
+(define-public (set-minimum-price (new-price uint))
+    (begin
+        (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+        (var-set minimum-price new-price)
+        (ok true)
+    )
+)
+
+;; #[allow(unchecked_data)]
+(define-public (pause-contract)
+    (begin
+        (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+        (var-set contract-paused true)
+        (ok true)
+    )
+)
+
+;; #[allow(unchecked_data)]
+(define-public (unpause-contract)
+    (begin
+        (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+        (var-set contract-paused false)
+        (ok true)
+    )
+)
